@@ -131,7 +131,7 @@ venv_python() { printf '%s' ".venv/bin/python"; }
 ensure_ipykernel_in_venv() {
 	local slug="$1" kname="kg-$slug"
 	# Install ipykernel into this venv (idempotent)
-	"$(venv_python)" -m pip install -q --upgrade pip ipykernel
+	uv pip install -q --upgrade pip ipykernel
 	# Register kernelspec (idempotent: overwrites name if exists)
 	"$(venv_python)" -m ipykernel install --user --name "$kname" --display-name "Python ($kname)"
 }
