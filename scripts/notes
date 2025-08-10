@@ -17,6 +17,7 @@ resolve_script_dir() {
 	done
 	cd -P "$(dirname "$src")" && pwd
 }
+PYTHON_VERSION=3.12
 SCRIPT_DIR="$(resolve_script_dir)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 NOTES_DIR="$ROOT_DIR/notes"
@@ -77,7 +78,7 @@ PYTOML
 		# create .venv if missing (prefer uv, fallback to python)
 		if [[ ! -d "$dir/.venv" ]]; then
 			if command -v uv >/dev/null 2>&1; then
-				(cd "$dir" && uv venv .venv)
+				(cd "$dir" && uv venv --prompt $slug --seed --python=$PYTHON_VERSION)
 			else
 				(cd "$dir" && python3 -m venv .venv)
 			fi
