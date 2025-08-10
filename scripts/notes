@@ -1,0 +1,164 @@
+#!/usr/bin/env bash
+# Manage Quarto notes. Run from anywhere.
+# Usage:
+#   notes <slug> [--title "Descriptive Title"] [--py] [--clj]
+#   notes open <slug> [--title "..."] [--py] [--clj]
+#   notes list
+set -euo pipefail
+
+# --- Resolve script dir even if called via symlink ---
+resolve_script_dir() {
+  local src="${BASH_SOURCE[0]}"
+  while [ -L "$src" ]; do
+    local dir; dir="$(cd -P "$(dirname "$src")" && pwd)"
+    src="$(readlink "$src")"
+    [[ "$src" != /* ]] && src="$dir/$src"
+  done
+  cd -P "$(dirname "$src")" && pwd
+}
+SCRIPT_DIR="$(resolve_script_dir)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+NOTES_DIR="$ROOT_DIR/notes"
+TEMPLATE_DIR="$ROOT_DIR/templates"
+TEMPLATE_NOTE="$TEMPLATE_DIR/note-index.qmd"
+EDITOR="${EDITOR:-nvim}"
+
+# --- helpers ---
+slugify() {
+  # kebab-case: lowercase, non-alnum -> -, trim dashes
+  printf '%s' "$*" \
+    | tr '[:upper:]' '[:lower:]' \
+    | sed -E 's/[^a-z0-9]+/-/g; s/^-+|-+$//g'
+}
+titleize_from_slug() {
+  # "foo-bar" -> "Foo Bar"
+  printf '%s' "$1" | tr '-' ' ' | awk '{ for(i=1;i<=NF;i++){ $i=toupper(substr($i,1,1)) substr($i,2) } ; print }'
+}
+
+ensure_note() {
+  local slug="$1" title="${2:-}" with_py="${3:-0}" with_clj="${4:-0}"
+
+  local dir="$NOTES_DIR/$slug"
+  mkdir -p "$dir"
+
+  # Create index.qmd once
+  if [[ ! -f "$dir/index.qmd" ]]; then
+    [[ -f "$TEMPLATE_NOTE" ]] || { echo "Template missing: $TEMPLATE_NOTE" >&2; exit 1; }
+    if [[ -z "$title" ]]; then title="$(titleize_from_slug "$slug")"; fi
+    # escape sed specials in title
+    local safe_title; safe_title="$(printf '%s' "$title" | sed -e 's/[&/\]/\\&/g')"
+    sed -e "s/{{TITLE}}/$safe_title/g" \
+        -e "s/{{SLUG}}/$slug/g" \
+        "$TEMPLATE_NOTE" > "$dir/index.qmd"
+    echo "Created: $dir/index.qmd"
+  fi
+
+  # optional scaffolds
+  if [[ "$with_py" == "1" ]]; then
+    if [[ ! -f "$dir/pyproject.toml" ]]; then
+      cat > "$dir/pyproject.toml" <<'PYTOML'
+[project]
+name = "note"
+version = "0.0.0"
+requires-python = ">=3.10"
+dependencies = []
+
+[tool.pyright]
+venvPath = "."
+venv = ".venv"
+PYTOML
+      echo "Created: $dir/pyproject.toml"
+    fi
+    # create .venv if missing (prefer uv, fallback to python)
+    if [[ ! -d "$dir/.venv" ]]; then
+      if command -v uv >/dev/null 2>&1; then
+        (cd "$dir" && uv venv .venv)
+      else
+        (cd "$dir" && python3 -m venv .venv)
+      fi
+      echo "Created: $dir/.venv"
+    fi
+    # ignore common stuff
+    if [[ ! -f "$dir/.gitignore" ]]; then
+      printf ".venv/\n__pycache__/\n.ipynb_checkpoints/\n" > "$dir/.gitignore"
+    fi
+  fi
+
+  if [[ "$with_clj" == "1" ]]; then
+    if [[ ! -f "$dir/deps.edn" ]]; then
+      cat > "$dir/deps.edn" <<'CLJ'
+{:paths ["src"]
+ :deps  {}}
+CLJ
+      mkdir -p "$dir/src"
+      echo "Created: $dir/deps.edn and src/"
+    fi
+    if [[ ! -f "$dir/.gitignore" ]]; then
+      printf "target/\n.cpcache/\n" > "$dir/.gitignore"
+    else
+      grep -q "target/" "$dir/.gitignore" || printf "target/\n.cpcache/\n" >> "$dir/.gitignore"
+    fi
+  fi
+
+  # cd into the note dir, activate venv if present, then open index.qmd
+  cd "$dir"
+  if [[ -f ".venv/bin/activate" ]]; then
+    # shellcheck disable=SC1091
+    source ".venv/bin/activate"
+  fi
+  exec "$EDITOR" "index.qmd"
+}
+
+list_slugs() {
+  [[ -d "$NOTES_DIR" ]] || return 0
+  find "$NOTES_DIR" -mindepth 1 -maxdepth 1 -type d \
+    | sed -E 's#.*/##' | LC_ALL=C sort
+}
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  notes <slug> [--title "Long Descriptive Title"] [--py] [--clj]
+  notes open <slug> [--title "..."] [--py] [--clj]
+  notes list
+Notes:
+  - <slug> must be kebab-case; it becomes the directory name under notes/.
+  - If the note doesn't exist, it's created with index.qmd.
+  - --py: scaffold pyproject.toml and .venv (uv if available, else python venv).
+  - --clj: scaffold deps.edn and src/.
+USAGE
+}
+
+main() {
+  local cmd slug title="" with_py=0 with_clj=0
+  cmd="${1:-}"; if [[ -z "$cmd" ]]; then usage; exit 2; fi
+
+  if [[ "$cmd" == "list" ]]; then list_slugs; exit 0; fi
+
+  if [[ "$cmd" == "open" ]]; then shift; fi
+
+  slug="${1:-}"; shift || true
+  if [[ -z "$slug" ]]; then usage; exit 2; fi
+
+  # normalize and validate slug
+  local norm; norm="$(slugify "$slug")"
+  if [[ "$norm" != "$slug" ]]; then
+    echo "Normalized slug to: $norm"
+    slug="$norm"
+  fi
+  [[ "$slug" =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]] || { echo "Invalid slug: $slug"; exit 2; }
+
+  # parse flags
+  while (( "$#" )); do
+    case "$1" in
+      --title) shift; title="${1:-}"; [[ -n "$title" ]] || { echo "--title requires value"; exit 2; } ;;
+      --py)    with_py=1 ;;
+      --clj)   with_clj=1 ;;
+      *) echo "Unknown option: $1"; usage; exit 2 ;;
+    esac
+    shift || true
+  done
+
+  ensure_note "$slug" "$title" "$with_py" "$with_clj"
+}
+main "$@"
