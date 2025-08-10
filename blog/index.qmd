@@ -1,8 +1,16 @@
+---
 title: Blog
 listing:
-  contents: blog
-  sort: "date desc"
-  type: default
-  date-format: "MMMM D, YYYY"
+  contents: blog        # pulls blog/*.qmd AND blog/**/*
+  sort: "date desc"     # newest first
+  template: ../templates/blog-by-year.ejs
+  # Optional UI (works with the template because we add metadataAttrs):
+  # sort-ui: false
+  # filter-ui: false
+  # Avoid breaking year-groups across pages:
+  page-size: 2000
 ---
+
+Welcome to the blog.
+
 Blog posts are published once and remain unchanged.

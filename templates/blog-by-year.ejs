@@ -1,0 +1,51 @@
+<%
+/*
+ items[]: listing items with fields like title, date, path, description, etc.
+
+ Goal: show posts grouped by year and link to /blog/YYYY/slug.html
+ even if the built file lives as /blog/YYYY/YYYY-mm-dd-slug.html.
+
+ We'll derive:
+  - year = from item.date
+  - slug = from the filename, stripping the leading date
+  - url  = `/blog/${year}/${slug}.html`
+*/
+
+function yearOf(it) {
+  const d = new Date(it.date || it['file-modified'] || Date.now());
+  return d.getFullYear();
+}
+
+function slugFromPath(p) {
+  const fname = (p || '').split('/').pop() || '';
+  const base = fname.replace(/\.html?$/,'');
+  // remove leading YYYY-mm-dd-
+  return base.replace(/^\d{4}-\d{2}-\d{2}-/,'');
+}
+
+const grouped = {};
+for (const it of items) {
+  const y = yearOf(it);
+  (grouped[y] ||= []).push(it);
+}
+const years = Object.keys(grouped).map(Number).sort((a,b)=> b-a);
+%>
+
+<div class="blog-archive">
+  <% for (const y of years) { %>
+    <h2 class="blog-archive-year"><%= y %></h2>
+    <ul class="list blog-archive-year-list">
+      <% for (const it of grouped[y].sort((a,b)=> new Date(b.date)-new Date(a.date))) {
+           const slug = slugFromPath(it.path);
+           const url  = `/blog/${y}/${slug}.html`; %>
+        <li <%= metadataAttrs(it) %> class="blog-archive-item">
+          <a href="<%- url %>" class="listing-title"><%= it.title %></a>
+          <span class="listing-date"><%= (new Date(it.date)).toLocaleDateString() %></span>
+          <% if (it.description) { %>
+            <div class="listing-description"><%= it.description %></div>
+          <% } %>
+        </li>
+      <% } %>
+    </ul>
+  <% } %>
+</div>
