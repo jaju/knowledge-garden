@@ -1,0 +1,13 @@
+[
+  {
+    "listing": "/blog/index.html",
+    "items": []
+  },
+  {
+    "listing": "/notes/index.html",
+    "items": [
+      "/notes/neural-networks/index.html",
+      "/notes/llm-from-scratch/index.html"
+    ]
+  }
+]

@@ -1,0 +1,7 @@
+/* Blog style placeholder */
+body { background-color: #ffffff; }
+.blog-archive-year { margin-top: 2rem; border-bottom: 1px solid #e5e7eb; padding-bottom: .25rem; }
+.blog-archive-year-list { list-style: none; padding-left: 0; }
+.blog-archive-item { margin: .75rem 0; }
+.blog-archive-item .listing-title { font-weight: 600; text-decoration: none; }
+.blog-archive-item .listing-date { margin-left: .5rem; opacity: .6; font-size: .9em; }
