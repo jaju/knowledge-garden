@@ -1,0 +1,4 @@
+jupyter: kg-llm-from-scratch
+execute:
+  cache: false
+  freeze: false

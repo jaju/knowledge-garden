@@ -1,0 +1,221 @@
+---
+title: "Notes: LLM From Scratch"
+number-sections: true
+bibliography: references.bib
+format:
+  html:
+    toc: true
+    code-fold: false
+    code-summary: "Click to expand/collapse"
+    code-tools: true
+    code-line-numbers: true
+    css: styles.css
+---
+
+# Synopsis
+
+Notes and pointers during the exploration of the book [LLM From Scratch](https://www.manning.com/books/build-a-large-language-model-from-scratch) by [Sebastian Raschka](https://github.com/rasbt). While I am using this book as the central reference, the notes will contain additional references and pointers to other resources.
+
+# Chapter 1: Understanding Large Language Models {#sec-chapter-1}
+
+- A good quality corpus is crucial.
+- Choice of corpus will depend on the downstream tasks.
+- For example, to generate code, the corpus should contain a substantial amount of code snippets.
+
+An open-source corpus of 3 trillion tokens has been detailed in [@dolma2024].
+
+## Key challenges in pre-training
+  - Data: Creating or curating a large corpus of text data is a significant challenge. The quality and diversity of the data are crucial for the performance of the model.
+  - Model: The model architecture is key for pre-training. A good model architecture will help in learning the underlying structure of the data.
+  - Budget: Pre-training a large language model requires a lot of computational resources. A good budget is crucial for pre-training.
+  - [GPT-3](https://en.wikipedia.org/wiki/GPT-3) potentially cost $4.6 million to train, per @gpt3technicaloverview.
+
+@instruct-gpt presented ideas on how to fine-tune GPT-3 on a dataset of instructions.
+
+# Chapter 2: Working with text data
+
+For a brief overview of tokens and embeddings in the context of deep learning text models, see [LLMs: Understanding Tokens and Embeddings](https://msync.org/notes/llm-understanding-tokens-embeddings/)
+
+There can be 
+- Standalone models just for embeddings (eg: Word2Vec [see @mikolov2013efficientestimationwordrepresentations], GloVe [see @pennington2014glove]), or
+- Models that use embeddings as part of a larger model (eg: BERT [see @devlin2018bert], GPT-3 [see @brown2020language]).
+
+::: {.callout-note collapse="true"}
+Embeddings from one model are typically not directly compatible with another model, because the embeddings are learned in the context of the model.
+:::
+
+## Tokenization
+The more tokens we have, the more information we can capture. However, more tokens also mean more computational resources.
+
+
+::: {.callout-note collapse="true"}
+### How does the token vocabulary affect computation?
+- The number of tokens affects the size of the embedding matrix.
+- The embedding matrix is a lookup table that maps each token to its corresponding embedding vector.
+- The size of the embedding matrix is determined by the vocabulary size and the embedding dimension. The larger the vocabulary, the larger the embedding matrix, and the more memory and computation are required to process it.
+:::
+
+- Tokens can be created not just for words, but also for subwords and characters.
+- This allows us to capture more information, and handle "words" not seen before.
+- We do not encode grammar rules (which are hard to define and may not be exhaustive or easy to update). Instead, we let the model learn the rules from the data. This is a key difference between traditional NLP and deep learning NLP.
+
+
+```{python}
+import importlib
+import stage1.tokenization
+importlib.reload(stage1.tokenization)
+```
+
+### V1
+The first, naive implementation that can not handle unseen tokens, as tokens are identified based on word boundaries from the training text.
+
+```{python}
+stage1.tokenization.v1()
+```
+
+
+### V2
+Ability to handle unseen tokens, plus additional signals to like begin/end of text, padding, etc. We simply preprocess the text to handle unseen tokens and replace then with a special token.
+
+```{python}
+stage1.tokenization.v2()
+```
+
+### V3 - Byte Pair Encoding (BPE)
+- Used in the original ChatGPT as well as GPT-2 and GPT-3. 
+  - This one goes further granular in how it identifies tokens - encompassing all atomic units and then certain agglomerations of them.- This is a data-driven approach to tokenization, where we learn the tokens from the data.
+- [tiktoken](https://github.com/openai/tiktoken) is a Python implementation of BPE. Implementation from scratch is not a key aim of this book, but it is useful to understand the concepts.
+
+In this example, we don't create a new vocabulary, but use the 'GPT-2' vocabulary. (See source)
+
+```{python}
+stage1.tokenization.v3()
+```
+Notice that the number of tokens is more than the number of distinct words in this example. We also have unseen words, which are split into multiple tokens that are in the vocabulary. This is a key feature of BPE, as it allows us to handle unseen words by breaking them down into smaller units that are in the vocabulary.
+
+### V4 
+This is a further improvement over the previous version. "Improvement" not because of the tokenization technique but because of how we inject special symbols into the text. We use a special token to indicate the beginning and end of a sentence, and a special token to indicate padding.
+
+```{python}
+stage1.tokenization.v4()
+```
+
+#### BPE: A further demonstration
+BPE can handle (apparently) garbage text. And also, it preserves spaces between tokens, because it makes no special assumptions about the text, including the notion of word boundaries.
+
+```{python}
+stage1.tokenization.v4bpe()
+```
+
+## Embeddings
+
+- Tokens as 1-hot vectors create sparse matrices that are inefficient and fail to capture semantic relationships
+- Embeddings represent tokens in a lower-dimensional space that preserves semantic relationships
+- Embeddings are learned, not universal representations, and are specific to the model they're trained in
+- The embedding space dimension is a tunable hyperparameter (larger = more informative but more resource-intensive)
+- Embeddings start as random values and are refined during training through gradient updates
+
+```{python}
+import importlib
+import stage1.embeddings
+importlib.reload(stage1.embeddings)
+```
+
+### What do they look like?
+Let's create a randomly initialized embedding matrix for a vocabulary of size 10 and an embedding dimension of 4. The embeddings matrix is then of size (10, 4), where each row corresponds to a token in the vocabulary and each column corresponds to a dimension in the embedding space.
+```{python}
+import torch
+import stage1.embeddings
+embedding_dim = 4
+vocab_size = 10
+
+embeddings = torch.nn.Embedding(vocab_size, embedding_dim)
+print(embeddings.weight)
+print(f"Embedding of token-id 2 is {embeddings(torch.tensor([1]))}")
+```
+
+The embedding of a token with id `i` is simply the `i`-th row of the embedding matrix. For example, the embedding of the token with id 0 is the first row of the embedding matrix. Mapping tokens to embeddings is plainly a lookup operation.
+
+### V0
+Printing the embedding matrix of a made-up vocabulary. The embeddings are randomly initialized.
+The embeddings matrix size is determined by the vocabulary size and the embedding dimension. The embedding dimension is a hyperparameter that can be tuned.
+
+Embeddings are tensors with a shape of (vocab_size, embedding_dim).
+```{python}
+#| echo: true
+import torch.nn as nn
+nn.Embedding(10, 4).weight
+```
+
+Once we have the embeddings matrix, we can map input tokens to their corresponding embeddings.
+```{python}
+stage1.embeddings.v0()
+```
+
+### V1
+
+- Data loaders create batches of token-ids for efficient processing
+- Batching is valuable for large text corpora
+- Batched processing leverages GPU acceleration when available
+- Even on CPU, batching enables more efficient multi-threaded processing
+- The example demonstrates creating embeddings for "The Verdict" text using previously created data loader with batch processing
+
+```{python}
+stage1.embeddings.v1()
+```
+
+### V2 - Using word positions
+
+* Taking the previous example and thinking further, while embeddings capture semantic relationships in a denser space, we also need to encode token positions in sentences.
+  * A word's meaning can change based on its position
+  * A sentence's meaning can change based on word order
+  * We hypothesize this and hope our neural network architecture will learn it
+
+* We'll abstract away the details of position encoding implementation:
+  * No clean notion of position exists (no defined start/end for text we process)
+  * Focus on the current input and calculations relative to it
+
+* Even within the current input batch, position is a hazy concept due to sliding windows:
+  * Options include using absolute positions within current sequence/batch
+  * Or encoding relative positions instead
+
+```{python}
+stage1.embeddings.v2pos()
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
