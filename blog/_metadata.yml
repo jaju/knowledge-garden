@@ -1,0 +1,5 @@
+format:
+  html:
+    theme: journal
+    css: ../styles/blog-style.css
+    toc: false

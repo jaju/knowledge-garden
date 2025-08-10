@@ -1,0 +1,25 @@
+project:
+  type: website
+  output-dir: _site
+  render:
+    - notes/**/*.qmd
+    - blog/**/*.qmd
+    - index.qmd
+
+website:
+  title: "M'Sync"
+  navbar:
+    left:
+      - text: Notes
+        href: notes/index.qmd
+      - text: Blog
+        href: blog/index.qmd
+  search: true
+
+format:
+  html:
+    toc: true
+    theme: cosmo
+
+execute:
+  freeze: auto

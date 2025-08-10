@@ -1,0 +1,6 @@
+format:
+  html:
+    theme: simplex
+    css: ../styles/notes-style.css
+    toc: true
+    toc-depth: 3

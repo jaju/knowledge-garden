@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+# Blog post manager for Quarto
+
+BLOG_DIR="blog"
+TEMPLATE_DIR="$(dirname "$0")/../templates"
+TEMPLATE="$TEMPLATE_DIR/blog-post.qmd"
+EDITOR="${EDITOR:-nvim}"
+
+slugify() {
+	echo "$1" | tr '[:upper:]' '[:lower:]' |
+		sed -E 's/[^a-z0-9]+/-/g' |
+		sed -E 's/^-+|-+$//g'
+}
+
+find_post_by_slug() {
+	local slug="$1"
+	find "$BLOG_DIR" -type f -name "*.qmd" |
+		grep -E "/[0-9]{4}(-[0-9]{2}){2}-${slug}\.qmd$" |
+		head -n 1
+}
+
+create_post() {
+	local title="$*"
+	local slug
+	slug=$(slugify "$title")
+
+	local existing
+	existing=$(find_post_by_slug "$slug")
+
+	if [[ -n "$existing" ]]; then
+		echo "Post already exists: $existing"
+		$EDITOR "$existing"
+		return
+	fi
+
+	local today
+	today=$(date +%Y-%m-%d)
+	local year=${today%%-*}
+	local target_dir="$BLOG_DIR"
+	[[ "$year" != "$(date +%Y)" ]] && target_dir="$BLOG_DIR/$year"
+
+	mkdir -p "$target_dir"
+	local file="$target_dir/${today}-${slug}.qmd"
+
+	sed "s/{{DATE}}/$today/; s/{{SLUG}}/$slug/; s/{{TITLE}}/$title/" "$TEMPLATE" >"$file"
+	echo "Created: $file"
+	$EDITOR "$file"
+}
+
+open_post() {
+	local title="$*"
+	local slug
+	slug=$(slugify "$title")
+
+	local existing
+	existing=$(find_post_by_slug "$slug")
+
+	if [[ -z "$existing" ]]; then
+		echo "No post found for slug: $slug" >&2
+		return 1
+	fi
+
+	$EDITOR "$existing"
+}
+
+list_slugs() {
+	find "$BLOG_DIR" -type f -name "*.qmd" |
+		sed -E 's/.*\/[0-9]{4}(-[0-9]{2}){2}-(.+)\.qmd/\2/' |
+		sort -u
+}
+
+case "$1" in
+new)
+	shift
+	create_post "$@"
+	;;
+open)
+	shift
+	open_post "$@"
+	;;
+list)
+	list_slugs
+	;;
+*)
+	echo "Usage: $(basename "$0") {new|open|list} <title>"
+	;;
+esac

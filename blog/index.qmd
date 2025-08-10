@@ -1,0 +1,8 @@
+title: Blog
+listing:
+  contents: blog
+  sort: "date desc"
+  type: default
+  date-format: "MMMM D, YYYY"
+---
+Blog posts are published once and remain unchanged.

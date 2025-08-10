@@ -1,0 +1,9 @@
+title: Notes
+listing:
+  contents: .
+  sort: "title"
+  type: default
+  categories: true
+  filter-ui: true
+---
+Evolving notes. Content here is updated over time.
