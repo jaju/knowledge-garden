@@ -1,25 +1,23 @@
 #!/usr/bin/env bash
 #
-# notes.sh — Manage Quarto notes with per-note directories.
+# notes.sh — Manage Quarto notes with per-note directories (single entry: index.qmd).
 #
-# Features:
-# - Create/open notes in notes/<slug>/ with index.qmd from template
-# - Optional Python (--py) or Clojure (--clj) scaffolds
-# - Slug = kebab-case directory name
-# - Title = long descriptive string (front-matter)
-# - Auto-create per-note _metadata.yml with jupyter kernel spec (kg-<slug>)
-# - Update kernel spec in _metadata.yml with --set-kernel
-# - Print kernel install command with --print-kernel-cmd (user runs manually)
+# Key points:
+# - No _metadata.yml. Kernel is set in index.qmd front-matter (highest priority).
+# - Slug = kebab-case directory name under notes/.
+# - Title = long descriptive string in index.qmd.
+# - Optional scaffolds: Python (--py) with .venv, Clojure (--clj).
+# - --set-kernel updates/ensures `engine: jupyter` and `jupyter: kg-<slug>` in index.qmd.
+# - --print-kernel-cmd prints the ipykernel install commands (user runs them manually).
 #
 # Usage:
 #   notes <slug> [--title "Title"] [--py] [--clj] [--set-kernel] [--print-kernel-cmd]
 #   notes open <slug> [options...]
 #   notes list
 #
-
 set -euo pipefail
 
-# --- Resolve script dir even if symlinked ---
+# --- Resolve script dir (works with symlinks) ---
 resolve_script_dir() {
 	local src="${BASH_SOURCE[0]}"
 	while [ -L "$src" ]; do
@@ -30,7 +28,6 @@ resolve_script_dir() {
 	done
 	cd -P "$(dirname "$src")" && pwd
 }
-PYTHON_VERSION=3.12
 SCRIPT_DIR="$(resolve_script_dir)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 NOTES_DIR="$ROOT_DIR/notes"
@@ -38,6 +35,7 @@ TEMPLATE_DIR="$ROOT_DIR/templates"
 TEMPLATE_NOTE="$TEMPLATE_DIR/note-index.qmd"
 EDITOR="${EDITOR:-nvim}"
 
+# --- helpers ---
 slugify() {
 	printf '%s' "$*" |
 		tr '[:upper:]' '[:lower:]' |
@@ -48,43 +46,74 @@ titleize_from_slug() {
 	printf '%s' "$1" | tr '-' ' ' | awk '{ for(i=1;i<=NF;i++){ $i=toupper(substr($i,1,1)) substr($i,2) } ; print }'
 }
 
-write_note_metadata() {
-	local dir="$1" slug="$2" kname="kg-$slug"
-	cat >"$dir/_metadata.yml" <<EOF
+print_kernel_install_cmd() {
+	local slug="$1" kname="kg-$slug"
+	cat <<EOF
+# Activate your note's virtualenv (if any), then run:
+python -m pip install -U pip ipykernel
+python -m ipykernel install --user --name "$kname" --display-name "Python ($kname)"
+EOF
+}
+
+# Update or create front-matter in index.qmd:
+# - ensures a YAML front-matter block exists
+# - removes any existing 'jupyter:' and 'engine:' in front-matter
+# - adds:
+#     engine: jupyter
+#     jupyter: kg-<slug>
+# - preserves the rest of the front-matter and body
+ensure_front_matter_kernel() {
+	local file="$1" slug="$2" kname="kg-$slug"
+	if [[ ! -s "$file" ]]; then
+		cat >"$file" <<EOF
+---
+title: "$(titleize_from_slug "$slug")"
+slug: "$slug"
 engine: jupyter
 jupyter: $kname
 execute:
   daemon: false
   cache: true
   freeze: auto
+---
 EOF
-	echo "Wrote: $dir/_metadata.yml"
-}
-
-print_kernel_install_cmd() {
-	local slug="$1" kname="kg-$slug"
-	cat <<EOF
-# Activate your virtualenv, then run:
-python -m pip install -U pip ipykernel
-python -m ipykernel install --user --name "$kname" --display-name "Python ($kname)"
-EOF
-}
-
-update_kernel_in_metadata() {
-	local dir="$1" slug="$2" kname="kg-$slug"
-	if [[ ! -f "$dir/_metadata.yml" ]]; then
-		echo "No _metadata.yml in $dir — creating new one."
-		write_note_metadata "$dir" "$slug"
 		return
 	fi
-	# Replace or insert jupyter: line
-	if grep -q '^jupyter:' "$dir/_metadata.yml"; then
-		sed -i.bak "s|^jupyter:.*|jupyter: $kname|" "$dir/_metadata.yml" && rm -f "$dir/_metadata.yml.bak"
-		echo "Updated kernel in $dir/_metadata.yml to $kname"
-	else
-		echo "jupyter: $kname" >>"$dir/_metadata.yml"
-		echo "Added kernel to $dir/_metadata.yml"
+
+	# If file lacks starting '---', create a new front-matter and prepend
+	if ! head -n1 "$file" | grep -qx '---'; then
+		local tmp
+		tmp="$(mktemp)"
+		cat >"$tmp" <<EOF
+---
+engine: jupyter
+jupyter: $kname
+execute:
+  daemon: false
+  cache: true
+  freeze: auto
+---
+EOF
+		cat "$file" >>"$tmp"
+		mv "$tmp" "$file"
+		return
 	fi
+
+	# Replace inside existing front-matter
+	# awk logic:
+	#  - capture lines between first and second --- (front-matter)
+	#  - drop lines starting with jupyter: or engine:
+	#  - inject engine/jupyter before closing ---
+	local tmp
+	tmp="$(mktemp)"
+	awk -v kname="$kname" '
+    BEGIN{inmeta=0}
+    NR==1 && $0=="---"{print; inmeta=1; next}
+    inmeta && $0=="---"{print "engine: jupyter"; print "jupyter: " kname; print "execute:"; print "  daemon: false"; print "  cache: true"; print "  freeze: auto"; print; inmeta=0; next}
+    inmeta && ($0 ~ /^[[:space:]]*jupyter:/ || $0 ~ /^[[:space:]]*engine:/){next}
+    {print}
+  ' "$file" >"$tmp"
+	mv "$tmp" "$file"
 }
 
 ensure_note() {
@@ -92,17 +121,19 @@ ensure_note() {
 	local dir="$NOTES_DIR/$slug"
 	mkdir -p "$dir"
 
-	# Create index.qmd if missing
-	if [[ ! -f "$dir/index.qmd" ]]; then
-		[[ -f "$TEMPLATE_NOTE" ]] || {
-			echo "Template missing: $TEMPLATE_NOTE" >&2
-			exit 1
-		}
-		[[ -z "$title" ]] && title="$(titleize_from_slug "$slug")"
-		local safe_title
-		safe_title="$(printf '%s' "$title" | sed -e 's/[&/\]/\\&/g')"
-		sed -e "s/{{TITLE}}/$safe_title/g" -e "s/{{SLUG}}/$slug/g" "$TEMPLATE_NOTE" >"$dir/index.qmd"
-		echo "Created: $dir/index.qmd"
+	local idx="$dir/index.qmd"
+	if [[ ! -f "$idx" ]]; then
+		if [[ -f "$TEMPLATE_NOTE" ]]; then
+			# Fill template with TITLE/SLUG; kernel will be injected afterwards
+			local safe_title
+			[[ -z "$title" ]] && title="$(titleize_from_slug "$slug")"
+			safe_title="$(printf '%s' "$title" | sed -e 's/[&/\]/\\&/g')"
+			sed -e "s/{{TITLE}}/$safe_title/g" -e "s/{{SLUG}}/$slug/g" "$TEMPLATE_NOTE" >"$idx"
+		else
+			# Minimal file; kernel/front-matter will be ensured below
+			printf "" >"$idx"
+		fi
+		echo "Created: $idx"
 	fi
 
 	# Optional Python scaffold
@@ -119,14 +150,13 @@ PYTOML
 		fi
 		if [[ ! -d "$dir/.venv" ]]; then
 			if command -v uv >/dev/null 2>&1; then
-				(cd "$dir" && uv venv --prompt $slug --seed --python=$PYTHON_VERSION)
+				(cd "$dir" && uv venv .venv)
 			else
 				(cd "$dir" && python3 -m venv .venv)
 			fi
 			echo "Created: $dir/.venv"
 		fi
 		if [[ ! -f "$dir/.gitignore" ]]; then printf ".venv/\n__pycache__/\n" >"$dir/.gitignore"; fi
-		write_note_metadata "$dir" "$slug"
 	fi
 
 	# Optional Clojure scaffold
@@ -144,14 +174,15 @@ CLJ
 
 	# Kernel operations
 	if [[ "$set_kernel" == "1" ]]; then
-		update_kernel_in_metadata "$dir" "$slug"
+		ensure_front_matter_kernel "$idx" "$slug"
+		echo "Kernel set in front-matter: engine=jupyter, jupyter=kg-$slug"
 	fi
 	if [[ "$print_kernel" == "1" ]]; then
 		print_kernel_install_cmd "$slug"
 		exit 0
 	fi
 
-	# Open in editor after cd
+	# Open in editor after cd; activate venv if present
 	cd "$dir"
 	if [[ -f ".venv/bin/activate" ]]; then
 		# shellcheck disable=SC1091
@@ -166,27 +197,6 @@ list_slugs() {
 		sed -E 's#.*/##' | LC_ALL=C sort
 }
 
-venv_python() { printf '%s' ".venv/bin/python"; }
-
-ensure_ipykernel_in_venv() {
-	local slug="$1" kname="kg-$slug"
-	# Install ipykernel into this venv (idempotent)
-	uv pip install -q --upgrade pip ipykernel
-	# Register kernelspec (idempotent: overwrites name if exists)
-	"$(venv_python)" -m ipykernel install --user --name "$kname" --display-name "Python ($kname)"
-}
-
-write_note_metadata() {
-	local dir="$1" slug="$2" kname="kg-$slug"
-	cat >"$dir/_metadata.yml" <<EOF
-jupyter: $kname
-execute:
-  cache: true
-  freeze: auto
-EOF
-	echo "Wrote: $dir/_metadata.yml"
-}
-
 usage() {
 	cat <<'USAGE'
 Usage:
@@ -196,10 +206,10 @@ Usage:
 
 Options:
   --title "Title"       Set descriptive title in index.qmd
-  --py                  Scaffold Python (pyproject.toml, .venv, _metadata.yml)
+  --py                  Scaffold Python (pyproject.toml, .venv)
   --clj                 Scaffold Clojure (deps.edn, src/)
-  --set-kernel          Update/add jupyter kernel spec in _metadata.yml
-  --print-kernel-cmd    Print ipykernel install command for this note
+  --set-kernel          Write front-matter: engine: jupyter, jupyter: kg-<slug>
+  --print-kernel-cmd    Print ipykernel install commands for kg-<slug> (no changes)
 USAGE
 }
 

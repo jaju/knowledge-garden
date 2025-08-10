@@ -2,6 +2,12 @@
 title: "Notes: LLM From Scratch"
 number-sections: true
 bibliography: references.bib
+engine: jupyter
+jupyter: kg-llm-from-scratch
+execute:
+  daemon: false
+  cache: true
+  freeze: auto
 format:
   html:
     toc: true
