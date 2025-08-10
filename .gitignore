@@ -2,3 +2,5 @@
 /_site/
 .jupyter_cache/
 _freeze/
+/node_modules
+/dist

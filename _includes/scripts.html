@@ -1,0 +1,13 @@
+<script>
+(function () {
+  // Find the CSS link Quarto inserted (it has the correct relative path),
+  // then derive the base path and load main.js from the same base.
+  const link = document.querySelector('link[href*="dist/main.css"]');
+  const href = link ? link.getAttribute('href') : 'dist/main.css';
+  const base = href.replace(/dist\/main\.css.*/, '');
+  const s = document.createElement('script');
+  s.type = 'module';
+  s.src = base + 'dist/main.js';
+  document.body.appendChild(s);
+})();
+</script>

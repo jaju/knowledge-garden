@@ -1,0 +1,33 @@
+/* Tailwind v4 core */
+@import "tailwindcss";
+
+/* Tell Tailwind where your classes live (Quarto, HTML, and any TS/TSX islands) */
+@source "../**/*.{qmd,md,markdown,html}";
+@source "../../**/*.{qmd,md,markdown,html}";
+@source "../**/*.{js,ts,jsx,tsx}";
+@source "../../**/*.{js,ts,jsx,tsx}";
+
+/* First-party plugins (v4: CSS-first) */
+@plugin "@tailwindcss/typography";
+@plugin "@tailwindcss/forms";
+
+/* Class-based dark mode */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Design tokens */
+@theme {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+               Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji",
+               "Segoe UI Emoji", "Segoe UI Symbol";
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* Example brand color (OKLCH recommended) */
+  --color-brand: oklch(0.67 0.18 265);
+}
+
+/* Quarto article content: beautiful prose */
+.quarto-article .content { @apply prose prose-lg max-w-none; }
+.dark .quarto-article .content { @apply prose-invert; }
+
+/* Code niceties */
+pre code, code { font-feature-settings: "calt" 0; font-variant-ligatures: none; }

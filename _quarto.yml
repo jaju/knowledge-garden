@@ -1,6 +1,9 @@
 project:
   type: website
   output-dir: _site
+  pre-render: "yarn build"
+  resources:
+    - dist
   render:
     - notes/**/*.qmd
     - blog/**/*.qmd
@@ -14,12 +17,34 @@ website:
         href: notes/index.qmd
       - text: Blog
         href: blog/index.qmd
-  search: true
+    right:
+      - icon: moon-stars
+      - href: "#"
+      - aria-label: Toggle theme
+  sidebar:
+    style: floating
+    search: true
+  search:
+    location: navbar
+    type: overlay
+    copy-button: true
 
 format:
   html:
+    theme: none
+    css: [dist/main.css]
     toc: true
-    theme: cosmo
+    toc-depth: 3
+    code-copy: true
+    code-overflow: wrap
+    smooth-scroll: true
+    include-after-body:
+      - _includes/scripts.html
+    link-external-newwindow: true
+    anchor-section: true
+
+filters:
+  - quarto
 
 execute:
   freeze: auto

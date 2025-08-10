@@ -1,6 +1,10 @@
 ---
 title: "Notes: LLM From Scratch"
+toc: true
 number-sections: true
+page-layout: article
+sidebar: true
+date-modified: last-modified
 bibliography: references.bib
 engine: jupyter
 jupyter: kg-llm-from-scratch

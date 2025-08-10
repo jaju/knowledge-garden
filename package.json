@@ -1,0 +1,26 @@
+{
+  "name": "knowledge-garden",
+  "version": "1.0.0",
+  "description": "M'Sync: Knowledge Garden",
+  "repository": "git@github.com:jaju/knowledge-garden.git",
+  "author": "Ravindra R. Jaju <jaju@msync.org>",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "dev:css": "tailwindcss -i ./src/styles/site.css -o ./dist/main.css --watch",
+    "dev:js": "vite build --watch",
+    "dev": "yarn dev:css & yarn dev:js",
+    "build:css": "tailwindcss -i ./src/styles/site.css -o ./dist/main.css --minify",
+    "build:js": "vite build",
+    "build": "yarn build:css && yarn build:js",
+    "preview": "quarto preview"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.1.11",
+    "@tailwindcss/forms": "^0.5.10",
+    "@tailwindcss/typography": "^0.5.16",
+    "tailwindcss": "^4.1.11",
+    "typescript": "^5.9.2",
+    "vite": "^7.1.1"
+  }
+}
